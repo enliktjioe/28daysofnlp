@@ -1,2 +1,4 @@
 week1_nlp_libraries/stanford-corenlp-latest.zip
 week1_nlp_libraries/stanford-corenlp-4.2.0/
+week2_sentiment_analysis/data/aclImdb/
+week2_sentiment_analysis/model_artifacts/
