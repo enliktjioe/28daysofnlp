@@ -3,3 +3,7 @@ week1_nlp_libraries/stanford-corenlp-4.2.0/
 week2_sentiment_analysis/data/aclImdb/
 week2_sentiment_analysis/model_artifacts/
 week2_sentiment_analysis/data/Reviews.csv
+
+week2_sentiment_analysis/config_twitter.py
+
+week2_sentiment_analysis/__pycache__/
