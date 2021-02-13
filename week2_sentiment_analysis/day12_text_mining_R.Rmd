@@ -1,0 +1,534 @@
+---
+title: "day12_text_mining_R"
+author: "Enlik Tjioe"
+date: "2/13/2021"
+output: html_document
+---
+
+# References
+
+https://www.tidytextmining.com/index.html
+
+```{r}
+text <- c("Because I could not stop for Death -",
+          "He kindly stopped for me -",
+          "The Carriage held but just Ourselves -",
+          "and Immortality")
+
+text
+```
+
+```{r}
+library(dplyr)
+text_df <- tibble(line = 1:4, text = text)
+text_df
+```
+
+```{r}
+library(tidytext)
+
+text_df %>% 
+  unnest_tokens(word, text)
+```
+```{r}
+library(janeaustenr)
+library(dplyr)
+library(stringr)
+
+original_books <- austen_books() %>%
+  group_by(book) %>%
+  mutate(linenumber = row_number(),
+         chapter = cumsum(str_detect(text, 
+                                     regex("^chapter [\\divxlc]",
+                                           ignore_case = TRUE)))) %>%
+  ungroup()
+
+original_books
+```
+
+```{r}
+library(tidytext)
+tidy_books <- original_books %>%
+  unnest_tokens(word, text)
+
+tidy_books
+```
+```{r}
+data(stop_words)
+
+tidy_books <- tidy_books %>%
+  anti_join(stop_words)
+```
+
+```{r}
+tidy_books %>%
+  count(word, sort = TRUE)
+```
+
+
+```{r}
+library(ggplot2)
+
+tidy_books %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 600) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(y = NULL)
+```
+
+
+# The gutenbergr package
+- Problem with the library -> skipped
+
+```{r}
+library(gutenbergr)
+
+# download all books from Jane Austen
+austen <- gutenberg_works(author == "Austen, Jane") %>%
+  gutenberg_download(meta_fields = "title")
+```
+
+# Sentiment Analysis with Tidy Data
+
+```{r}
+library(tidytext)
+get_sentiments("afinn")
+```
+
+```{r}
+get_sentiments("bing")
+```
+
+```{r}
+get_sentiments("nrc")
+```
+
+```{r}
+library(janeaustenr)
+library(dplyr)
+library(stringr)
+
+tidy_books <- austen_books() %>%
+  group_by(book) %>%
+  mutate(
+    linenumber = row_number(),
+    chapter = cumsum(str_detect(text, 
+                                regex("^chapter [\\divxlc]", 
+                                      ignore_case = TRUE)))) %>%
+  ungroup() %>%
+  unnest_tokens(word, text)
+```
+
+
+
+```{r}
+nrc_joy <- get_sentiments("nrc") %>% 
+  filter(sentiment == "joy")
+
+tidy_books %>%
+  filter(book == "Emma") %>%
+  inner_join(nrc_joy) %>%
+  count(word, sort = TRUE)
+```
+
+```{r}
+library(tidyr)
+
+jane_austen_sentiment <- tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(book, index = linenumber %/% 80, sentiment) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative)
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(jane_austen_sentiment, aes(index, sentiment, fill = book)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~book, ncol = 2, scales = "free_x")
+```
+
+## Comparing the three sentiment dictionaries
+
+```{r}
+pride_prejudice <- tidy_books %>% 
+  filter(book == "Pride & Prejudice")
+
+pride_prejudice
+```
+```{r}
+afinn <- pride_prejudice %>% 
+  inner_join(get_sentiments("afinn")) %>% 
+  group_by(index = linenumber %/% 80) %>% 
+  summarise(sentiment = sum(value)) %>% 
+  mutate(method = "AFINN")
+
+bing_and_nrc <- bind_rows(
+  pride_prejudice %>% 
+    inner_join(get_sentiments("bing")) %>%
+    mutate(method = "Bing et al."),
+  pride_prejudice %>% 
+    inner_join(get_sentiments("nrc") %>% 
+                 filter(sentiment %in% c("positive", 
+                                         "negative"))
+    ) %>%
+    mutate(method = "NRC")) %>%
+  count(method, index = linenumber %/% 80, sentiment) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative)
+```
+
+```{r}
+bind_rows(afinn, 
+          bing_and_nrc) %>%
+  ggplot(aes(index, sentiment, fill = method)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~method, ncol = 1, scales = "free_y")
+```
+```{r}
+get_sentiments("nrc") %>% 
+  filter(sentiment %in% c("positive", "negative")) %>% 
+  count(sentiment)
+```
+
+```{r}
+get_sentiments("bing") %>% 
+  count(sentiment)
+```
+
+```{r}
+bing_word_counts <- tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+bing_word_counts
+```
+
+
+```{r}
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  top_n(10) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(x = "Contribution to sentiment",
+       y = NULL)
+```
+
+
+```{r}
+custom_stop_words <- bind_rows(tibble(word = c("miss"),  
+                                      lexicon = c("custom")), 
+                               stop_words)
+
+custom_stop_words
+```
+## Wordclouds
+
+```{r}
+library(wordcloud)
+
+tidy_books %>%
+  anti_join(stop_words) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 100))
+```
+
+```{r}
+library(reshape2)
+
+tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("gray20", "gray80"),
+                   max.words = 100)
+```
+## Looking at units beyond just words
+
+```{r}
+p_and_p_sentences <- tibble(text = prideprejudice) %>% 
+  unnest_tokens(sentence, text, token = "sentences")
+```
+
+
+```{r}
+p_and_p_sentences$sentence[2]
+```
+
+```{r}
+austen_chapters <- austen_books() %>%
+  group_by(book) %>%
+  unnest_tokens(chapter, text, token = "regex", 
+                pattern = "Chapter|CHAPTER [\\dIVXLC]") %>%
+  ungroup()
+
+austen_chapters %>% 
+  group_by(book) %>% 
+  summarise(chapters = n())
+```
+
+```{r}
+bingnegative <- get_sentiments("bing") %>% 
+  filter(sentiment == "negative")
+
+wordcounts <- tidy_books %>%
+  group_by(book, chapter) %>%
+  summarize(words = n())
+
+tidy_books %>%
+  semi_join(bingnegative) %>%
+  group_by(book, chapter) %>%
+  summarize(negativewords = n()) %>%
+  left_join(wordcounts, by = c("book", "chapter")) %>%
+  mutate(ratio = negativewords/words) %>%
+  filter(chapter != 0) %>%
+  top_n(1) %>%
+  ungroup()
+```
+
+# Case Study: Mining NASA metadata
+
+```{r}
+library(jsonlite)
+metadata <- fromJSON("https://data.nasa.gov/data.json")
+names(metadata$dataset)
+```
+
+```{r}
+class(metadata$dataset$title)
+class(metadata$dataset$description)
+class(metadata$dataset$keyword)
+```
+
+## Wrangling and Tidying Data
+
+```{r}
+library(dplyr)
+
+nasa_title <- tibble(id = metadata$dataset$identifier, 
+                     title = metadata$dataset$title)
+nasa_title
+```
+
+```{r}
+nasa_desc <- tibble(id = metadata$dataset$identifier, 
+                    desc = metadata$dataset$description)
+
+nasa_desc %>% 
+  select(desc) %>% 
+  sample_n(5)
+```
+
+```{r}
+library(tidyr)
+
+nasa_keyword <- tibble(id = metadata$dataset$identifier, 
+                       keyword = metadata$dataset$keyword) %>%
+  unnest(keyword)
+
+nasa_keyword
+```
+
+```{r}
+library(tidytext)
+
+nasa_title <- nasa_title %>% 
+  unnest_tokens(word, title) %>% 
+  anti_join(stop_words)
+
+nasa_desc <- nasa_desc %>% 
+  unnest_tokens(word, desc) %>% 
+  anti_join(stop_words)
+```
+
+```{r}
+nasa_title
+```
+
+```{r}
+nasa_desc
+```
+
+## Word Co-Occurences and Correlations
+
+```{r}
+library(widyr)
+
+title_word_pairs <- nasa_title %>% 
+  pairwise_count(word, id, sort = TRUE, upper = FALSE)
+
+title_word_pairs
+```
+
+```{r}
+desc_word_pairs <- nasa_desc %>% 
+  pairwise_count(word, id, sort = TRUE, upper = FALSE)
+
+desc_word_pairs
+```
+
+```{r}
+library(ggplot2)
+library(igraph)
+library(ggraph)
+
+set.seed(1234)
+title_word_pairs %>%
+  filter(n >= 250) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "cyan4") +
+  geom_node_point(size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE, 
+                 point.padding = unit(0.2, "lines")) +
+  theme_void()
+```
+
+```{r}
+set.seed(1234)
+desc_word_pairs %>%
+  filter(n >= 5000) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "darkred") +
+  geom_node_point(size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE,
+                 point.padding = unit(0.2, "lines")) +
+  theme_void()
+```
+
+```{r}
+keyword_pairs <- nasa_keyword %>% 
+  pairwise_count(keyword, id, sort = TRUE, upper = FALSE)
+
+keyword_pairs
+
+set.seed(1234)
+keyword_pairs %>%
+  filter(n >= 700) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "royalblue") +
+  geom_node_point(size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE,
+                 point.padding = unit(0.2, "lines")) +
+  theme_void()
+
+```
+
+```{r}
+keyword_cors <- nasa_keyword %>% 
+  group_by(keyword) %>%
+  filter(n() >= 50) %>%
+  pairwise_cor(keyword, id, sort = TRUE, upper = FALSE)
+
+keyword_cors
+```
+
+```{r}
+set.seed(1234)
+keyword_cors %>%
+  filter(correlation > .6) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = correlation, edge_width = correlation), edge_colour = "royalblue") +
+  geom_node_point(size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE,
+                 point.padding = unit(0.2, "lines")) +
+  theme_void()
+```
+
+```{r}
+desc_tf_idf %>% 
+  filter(!near(tf, 1)) %>%
+  filter(keyword %in% c("SOLAR ACTIVITY", "CLOUDS", 
+                        "SEISMOLOGY", "ASTROPHYSICS",
+                        "HUMAN HEALTH", "BUDGET")) %>%
+  arrange(desc(tf_idf)) %>%
+  group_by(keyword) %>%
+  distinct(word, keyword, .keep_all = TRUE) %>%
+  slice_max(tf_idf, n = 15, with_ties = FALSE) %>% 
+  ungroup() %>%
+  mutate(word = factor(word, levels = rev(unique(word)))) %>%
+  ggplot(aes(tf_idf, word, fill = keyword)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~keyword, ncol = 3, scales = "free") +
+  labs(title = "Highest tf-idf words in NASA metadata description fields",
+       caption = "NASA metadata from https://data.nasa.gov/data.json",
+       x = "tf-idf", y = NULL)
+```
+
+## Topic Modeling
+
+```{r}
+desc_tf_idf %>% 
+  filter(!near(tf, 1)) %>%
+  filter(keyword %in% c("SOLAR ACTIVITY", "CLOUDS", 
+                        "SEISMOLOGY", "ASTROPHYSICS",
+                        "HUMAN HEALTH", "BUDGET")) %>%
+  arrange(desc(tf_idf)) %>%
+  group_by(keyword) %>%
+  distinct(word, keyword, .keep_all = TRUE) %>%
+  slice_max(tf_idf, n = 15, with_ties = FALSE) %>% 
+  ungroup() %>%
+  mutate(word = factor(word, levels = rev(unique(word)))) %>%
+  ggplot(aes(tf_idf, word, fill = keyword)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~keyword, ncol = 3, scales = "free") +
+  labs(title = "Highest tf-idf words in NASA metadata description fields",
+       caption = "NASA metadata from https://data.nasa.gov/data.json",
+       x = "tf-idf", y = NULL)
+```
+
+```{r}
+library(topicmodels)
+
+# be aware that running this model is time intensive
+desc_lda <- LDA(desc_dtm, k = 24, control = list(seed = 1234))
+desc_lda
+```
+
+```{r}
+tidy_lda <- tidy(desc_lda)
+
+tidy_lda
+```
+
+```{r}
+top_terms <- tidy_lda %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 10, with_ties = FALSE) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+top_terms
+```
+
+```{r}
+top_terms %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  group_by(topic, term) %>%    
+  arrange(desc(beta)) %>%  
+  ungroup() %>%
+  ggplot(aes(beta, term, fill = as.factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  scale_y_reordered() +
+  labs(title = "Top 10 terms in each LDA topic",
+       x = expression(beta), y = NULL) +
+  facet_wrap(~ topic, ncol = 4, scales = "free")
+```
+
+```{r}
+lda_gamma <- tidy(desc_lda, matrix = "gamma")
+
+lda_gamma
+```
+
