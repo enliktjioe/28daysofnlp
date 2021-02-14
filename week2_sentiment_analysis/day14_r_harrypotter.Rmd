@@ -1,0 +1,94 @@
+---
+title: "day14_r_harrypotter"
+author: "Enlik Tjioe"
+date: "2/14/2021"
+output: html_document
+---
+
+
+# Intro
+
+Tutorial Source: https://uc-r.github.io/sentiment_analysis
+
+
+```{r}
+if (packageVersion("devtools") < 1.6) {
+  install.packages("devtools")
+}
+
+devtools::install_github("bradleyboehmke/harrypotter")
+```
+
+```{r}
+library(tidyverse)      # data manipulation & plotting
+library(stringr)        # text cleaning and regular expressions
+library(tidytext)       # provides additional text mining functions
+library(harrypotter)    # provides the first seven novels of the Harry Potter series
+```
+
+```{r}
+# philosophers_stone[1:2]
+```
+
+## Sentiment Data Sets
+```{r}
+sentiments
+```
+
+
+## Basic Sentiment Analysis
+```{r}
+titles <- c("Philosopher's Stone", "Chamber of Secrets", "Prisoner of Azkaban",
+            "Goblet of Fire", "Order of the Phoenix", "Half-Blood Prince",
+            "Deathly Hallows")
+
+books <- list(philosophers_stone, chamber_of_secrets, prisoner_of_azkaban,
+           goblet_of_fire, order_of_the_phoenix, half_blood_prince,
+           deathly_hallows)
+  
+series <- tibble()
+
+for(i in seq_along(titles)) {
+        
+        clean <- tibble(chapter = seq_along(books[[i]]),
+                        text = books[[i]]) %>%
+             unnest_tokens(bigram, text, token = "ngrams", n = 2) %>%
+             mutate(book = titles[i]) %>%
+             select(book, everything())
+
+        series <- rbind(series, clean)
+}
+
+# set factor to keep books in order of publication
+series$book <- factor(series$book, levels = rev(titles))
+
+series
+```
+
+## Sentiment Analysis with Larger Units
+```{r}
+tibble(text = philosophers_stone) %>% 
+  unnest_tokens(sentence, text, token = "sentences")
+```
+
+```{r}
+ps_sentences <- tibble(chapter = 1:length(philosophers_stone),
+                        text = philosophers_stone) %>% 
+  unnest_tokens(sentence, text, token = "sentences")
+```
+
+```{r}
+book_sent <- ps_sentences %>%
+        group_by(chapter) %>%
+        mutate(sentence_num = 1:n(),
+               index = round(sentence_num / n(), 2)) %>%
+        unnest_tokens(word, sentence) %>%
+        inner_join(get_sentiments("afinn")) %>%
+        group_by(chapter)
+        # summarise(sentiment = sum(score, na.rm = TRUE))
+        # arrange(desc(sentiment))
+
+book_sent
+```
+
+
