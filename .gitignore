@@ -11,3 +11,5 @@ week2_sentiment_analysis/__pycache__/
 week2_sentiment_analysis/data/r_data/
 
 week3_pytorch/data/
+
+week3_pytorch/.data/
