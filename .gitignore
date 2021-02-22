@@ -14,4 +14,7 @@ week3_pytorch/data/cifar-10-batches-py/
 week3_pytorch/data/cifar-10-python.tar.gz
 
 week3_pytorch/.data/
-week3_pytorch/.ipynb_checkpoints/day19_translation_nn_GPU-checkpoint.ipynb
+week3_pytorch/.ipynb_checkpoints/
+nlp.code-workspace
+.gitignore
+week3_pytorch/tut1-model.pt
